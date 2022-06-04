@@ -1,0 +1,161 @@
+---
+title: "Cyclistic Bike-Share Case Study"
+author: "Oluwaseun Otoki"
+date: '2022-05-08'
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+The following analysis is based on the Google Data Analytics Capstone Case Study "How Does a Bike-Share Navigate Speedy Success?"
+
+## Background
+Cyclistic is bike-sharing company with a fleet of 5,824 bicycles that are geotracked and locked into a network of 692 stations across Chicago. The bikes can be unlocked from one station and returned to any other station in the system anytime.
+
+Cyclistic has 3 flexible pricing options: single-ride passes, full-day passes, and annual memberships. Customers who purchase single-ride or full-day passes are casual riders. Customers who purchase annual memberships are Cyclistic members.
+
+## Scenario
+You are a junior data analyst working in the marketing analyst team at Cyclistic, a bike-share company in Chicago. The director of marketing believes the company’s future success depends on maximizing the number of annual memberships. Therefore, your team wants to understand how casual riders and annual members use Cyclistic bikes differently. From these insights, your team will design a new marketing strategy to convert casual riders into annual members. But first, Cyclistic executives must approve your recommendations, so they must be backed up with compelling data insights and professional data visualizations.
+
+### Business Task
+How do annual members and casual riders use Cyclistic bikes differently? 
+
+## Preperation
+I am using Cyclistic’s historical trip [dataset](https://divvy-tripdata.s3.amazonaws.com/index.html) to analyze 12 months (April 2021-March 2022), prepared by [Motivate International Inc](https://ride.divvybikes.com/data-license-agreement). R will be used to for data cleaning and visualizations.
+
+**Step 1: Install packages**
+```{r loading packages, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(lubridate)
+library(dplyr)
+library(janitor)
+library(skimr)
+```
+**Step 2: Import data sets**
+```{r Import Data Sets, message=FALSE, warning=FALSE}
+trips_2104 <- read.csv('202104-divvy-tripdata.csv')
+trips_2105 <- read.csv('202105-divvy-tripdata.csv')
+trips_2106 <- read.csv('202106-divvy-tripdata.csv')
+trips_2107 <- read.csv('202107-divvy-tripdata.csv')
+trips_2108 <- read.csv('202108-divvy-tripdata.csv')
+trips_2109 <- read.csv('202109-divvy-tripdata.csv')
+trips_2110 <- read.csv('202110-divvy-tripdata.csv')
+trips_2111 <- read.csv('202111-divvy-tripdata.csv')
+trips_2112 <- read.csv('202112-divvy-tripdata.csv')
+trips_2201 <- read.csv('202201-divvy-tripdata.csv')
+trips_2202 <- read.csv('202202-divvy-tripdata.csv')
+trips_2203 <- read.csv('202203-divvy-tripdata.csv')
+```
+Compare column names of each file. **Columns must be in the same order for data merging**. Result "0 rows" means there are no discrepancies.
+```{r compare df cols}
+compare_df_cols(trips_2104, trips_2105, trips_2106, trips_2107, trips_2108, trips_2109, trips_2110, trips_2111, trips_2112, trips_2201, trips_2202, trips_2203, return = "mismatch")
+``` 
+
+Inspect the data frames for any inconsistencies
+```{r inspect data for inconsistencies}
+str(trips_2104)
+```
+**Step 3: Data Merging**
+
+Due to the consistency in the data, we are now able to merge our data into a single DataFrame.
+```{r combine data}
+city_trips <- bind_rows(trips_2104, trips_2105, trips_2106, trips_2107, trips_2108, trips_2109, trips_2110, trips_2111, trips_2112, trips_2201, trips_2202, trips_2203)
+```
+
+Drop the following columns: start_lat, start_lng, emd_lat, end_lng. 
+Data contains station locations already. Coordinates are not needed.
+```{r drop columns}
+city_trips <- city_trips %>% 
+  select(-c(start_lat, start_lng, end_lat, end_lng))
+```
+**Step 4: Adding new variables / Preparing for analysis**
+
+1. Add the date, month, year, day, and the day of the week.
+```{r add date month year and day of the week}
+city_trips$date <- as.Date(city_trips$started_at) #Format is yyyy-mm-dd
+city_trips$month <- format(as.Date(city_trips$date), "%m")
+city_trips$day <- format(as.Date(city_trips$date), "%d")
+city_trips$year <- format(as.Date(city_trips$date), "%Y")
+city_trips$day_of_week <- format(as.Date(city_trips$date), "%A")
+```
+2. Add ride the ride length.
+```{r add ride length}
+city_trips$ride_length <- difftime(city_trips$ended_at,city_trips$started_at)
+```
+
+## Analysis
+I will be calculating the mean, median, max, and min values to identify trends and differences in behavior between the different customers.
+```{r Aggregate}
+aggregate(city_trips$ride_length ~ city_trips$member_casual, FUN = mean)
+aggregate(city_trips$ride_length ~ city_trips$member_casual, FUN = median)
+aggregate(city_trips$ride_length ~ city_trips$member_casual, FUN = max)
+aggregate(city_trips$ride_length ~ city_trips$member_casual, FUN = min)
+aggregate(city_trips$ride_length ~ city_trips$member_casual + city_trips$day_of_week, FUN = mean)
+```
+
+**Organize the days of the week in order**
+```{r organize days}
+city_trips$day_of_week <- ordered(city_trips$day_of_week, levels=c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"))
+```
+
+**View the average ride time for each day by members v casual riders**
+```{r average ride time for each day by members v casual riders table}
+aggregate(city_trips$ride_length ~ city_trips$member_casual + city_trips$day_of_week, FUN = mean)
+```
+
+**View the number of rides and average duration per day by customer type**
+```{r number of rides and average duration per day by customer type table}
+city_trips %>% 
+  mutate(weekday = wday(started_at, label = TRUE)) %>% 
+  group_by(member_casual, weekday) %>% 
+  summarise(number_of_rides = n()  
+            ,average_duration = mean(ride_length/60)) %>% 
+  arrange(member_casual, weekday)
+```
+
+## Visualizations
+#### Number of rides per day by customer type
+```{r Number of rides per day by customer type viz}
+city_trips %>% 
+  mutate(weekday = wday(started_at, label = TRUE)) %>% 
+  group_by(member_casual, weekday) %>% 
+  summarise(number_of_rides = n()
+            ,average_duration = mean(ride_length)) %>% 
+  arrange(member_casual, weekday) %>% 
+  ggplot(aes(x = weekday, y = number_of_rides, fill = member_casual)) +
+  geom_col(position = "dodge") + scale_fill_manual(values = c("casual" = "#1b98e0", "member" = "orange")) + labs(title= "Number Of Rides Per Day", 
+        x = "Day of the Week", y = "Number of Rides", 
+        fill = "Customer Type")
+```
+
+#### Average trip duration per day by customer type
+```{r Average trip duration per day by customer type viz}
+city_trips %>% 
+  mutate(weekday = wday(started_at, label = TRUE)) %>% 
+  group_by(member_casual, weekday) %>% 
+  summarise(number_of_rides = n()
+            ,average_duration = mean(ride_length/60)) %>% 
+  arrange(member_casual, weekday) %>% 
+  ggplot(aes(x = weekday, y = average_duration, fill = member_casual)) +
+  geom_col(position = "dodge") + scale_fill_manual(values = c("casual" = "#1b98e0", "member" = "orange"))+
+  labs(title= "Average Duration Of Trips Per Day",
+  x = "Day of the Week", y = "Average Duration (min)", 
+  fill = "Customer Type")
+```
+
+## Conclusions
+1. Casual riders average more than two times the rate of members in trip duration.
+2. Members take more rides than casual customers except on weekends.
+
+## Recommendations
+1. Since casual riders average longer trips, increase their trip rate, which will incentivize them to switch to a member with lower trip rates.
+2. Develop member incentives such as store promotions or weekend promotions where the casual riders usually peak.
+
+
